@@ -81,6 +81,7 @@ impl DescriptorType {
 pub struct DescriptorInfo {
     pub ty: DescriptorType,
     pub is_bindless: bool,
+    pub is_array: bool,
     pub name: String,
 }
 
@@ -184,6 +185,7 @@ impl Reflection {
                 let element_type_id = get_operand_at!(type_instruction, Operand::IdRef, 0)?;
                 return Ok(DescriptorInfo {
                     is_bindless: true,
+                    is_array: true,
                     ..self.get_descriptor_type_for_var(element_type_id, storage_class)?
                 });
             }
@@ -193,6 +195,14 @@ impl Reflection {
                 let element_type_id = get_operand_at!(type_instruction, Operand::IdRef, 1)?;
                 assert_eq!(storage_class, ptr_storage_class);
                 return self.get_descriptor_type_for_var(element_type_id, storage_class);
+            }
+            spirv::Op::TypeArray => {
+                let element_type_id = get_operand_at!(type_instruction, Operand::IdRef, 0)?;
+                let _array_length_id = get_operand_at!(type_instruction, Operand::IdRef, 1)?;
+                return Ok(DescriptorInfo {
+                    is_array: true,
+                    ..self.get_descriptor_type_for_var(element_type_id, storage_class)?
+                });
             }
             _ => {}
         }
@@ -305,6 +315,7 @@ impl Reflection {
         Ok(DescriptorInfo {
             ty: descriptor_type,
             is_bindless: false,
+            is_array: false,
             name: "".to_string(),
         })
     }
