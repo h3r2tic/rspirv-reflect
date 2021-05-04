@@ -77,11 +77,17 @@ impl DescriptorType {
     pub const ACCELERATION_STRUCTURE_NV: Self = Self(1_000_165_000);
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DescriptorDimensionality {
+    Single,
+    RuntimeArray,
+    Array(u32),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct DescriptorInfo {
     pub ty: DescriptorType,
-    pub is_bindless: bool,
-    pub is_array: bool,
+    pub dimensionality: DescriptorDimensionality,
     pub name: String,
 }
 
@@ -184,8 +190,7 @@ impl Reflection {
             spirv::Op::TypeRuntimeArray => {
                 let element_type_id = get_operand_at!(type_instruction, Operand::IdRef, 0)?;
                 return Ok(DescriptorInfo {
-                    is_bindless: true,
-                    is_array: true,
+                    dimensionality: DescriptorDimensionality::RuntimeArray,
                     ..self.get_descriptor_type_for_var(element_type_id, storage_class)?
                 });
             }
@@ -198,9 +203,16 @@ impl Reflection {
             }
             spirv::Op::TypeArray => {
                 let element_type_id = get_operand_at!(type_instruction, Operand::IdRef, 0)?;
-                let _array_length_id = get_operand_at!(type_instruction, Operand::IdRef, 1)?;
+
+                // Based on the `spirv::Op::TypeArray` branch in `calculate_variable_size_bytes`
+                // TODO: multi-dimensional arrays?
+                let array_length_id = get_operand_at!(type_instruction, Operand::IdRef, 1)?;
+                let constant_instruction =
+                    Self::find_assignment_for(&self.0.types_global_values, array_length_id)?;
+                let array_length = get_operand_at!(constant_instruction, Operand::LiteralInt32, 0)?;
+
                 return Ok(DescriptorInfo {
-                    is_array: true,
+                    dimensionality: DescriptorDimensionality::Array(array_length),
                     ..self.get_descriptor_type_for_var(element_type_id, storage_class)?
                 });
             }
@@ -314,8 +326,7 @@ impl Reflection {
 
         Ok(DescriptorInfo {
             ty: descriptor_type,
-            is_bindless: false,
-            is_array: false,
+            dimensionality: DescriptorDimensionality::Single,
             name: "".to_string(),
         })
     }
